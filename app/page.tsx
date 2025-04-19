@@ -126,19 +126,19 @@ export default function Home() {
               <TableBody>
                 <TableRow>
                   <TableCell className="font-medium">Name</TableCell>
-                  <TableCell>{resumeData.personalInfo.name}</TableCell>
+                  <TableCell>{resumeData?.personalInfo?.name}</TableCell>
                 </TableRow>
                 <TableRow>
                   <TableCell className="font-medium">Email</TableCell>
-                  <TableCell>{resumeData.personalInfo.email}</TableCell>
+                  <TableCell>{resumeData?.personalInfo?.email}</TableCell>
                 </TableRow>
                 <TableRow>
                   <TableCell className="font-medium">Phone</TableCell>
-                  <TableCell>{resumeData.personalInfo.phone}</TableCell>
+                  <TableCell>{resumeData?.personalInfo?.phone}</TableCell>
                 </TableRow>
                 <TableRow>
                   <TableCell className="font-medium">Location</TableCell>
-                  <TableCell>{resumeData.personalInfo.location}</TableCell>
+                  <TableCell>{resumeData?.personalInfo?.location}</TableCell>
                 </TableRow>
               </TableBody>
             </Table>
@@ -156,7 +156,7 @@ export default function Home() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {resumeData.education.map((edu, index) => (
+                {resumeData?.education.map((edu, index) => (
                   <TableRow key={index}>
                     <TableCell>{edu.degree}</TableCell>
                     <TableCell>{edu.institution}</TableCell>
@@ -180,7 +180,7 @@ export default function Home() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {resumeData.experience.map((exp, index) => (
+                {resumeData?.experience.map((exp, index) => (
                   <TableRow key={index}>
                     <TableCell>{exp.title}</TableCell>
                     <TableCell>{exp.company}</TableCell>
@@ -209,7 +209,7 @@ export default function Home() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {resumeData.projects.map((project, index) => (
+                {resumeData?.projects.map((project, index) => (
                   <TableRow key={index}>
                     <TableCell>{project.name}</TableCell>
                     <TableCell>{project.description}</TableCell>
@@ -236,7 +236,7 @@ export default function Home() {
             <Card className="p-6">
               <h2 className="text-2xl font-semibold mb-4">Skills</h2>
               <div className="flex flex-wrap gap-2">
-                {resumeData.skills.map((skill, index) => (
+                {resumeData?.skills.map((skill, index) => (
                   <span
                     key={index}
                     className="px-3 py-1 bg-primary/10 rounded-full text-sm"
@@ -250,7 +250,7 @@ export default function Home() {
             <Card className="p-6">
               <h2 className="text-2xl font-semibold mb-4">Certifications</h2>
               <ul className="list-disc list-inside">
-                {resumeData.certifications.map((cert, index) => (
+                {resumeData?.certifications.map((cert, index) => (
                   <li key={index}>{cert}</li>
                 ))}
               </ul>
