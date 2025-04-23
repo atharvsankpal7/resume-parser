@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface ResumeData {
   personalInfo: {
@@ -42,6 +43,10 @@ export default function Home() {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [resumeData, setResumeData] = useState<ResumeData[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
+  const [filterType, setFilterType] = useState("all");
+  const [skillFilter, setSkillFilter] = useState("");
+  const [locationFilter, setLocationFilter] = useState("");
+  const [experienceFilter, setExperienceFilter] = useState("");
   const { toast } = useToast();
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -99,21 +104,50 @@ export default function Home() {
   };
 
   const filteredResumes = useCallback(() => {
-    if (!searchTerm) return resumeData;
+    let filtered = [...resumeData];
 
-    const searchTermLower = searchTerm.toLowerCase();
-    return resumeData.filter((resume) => {
-      return (
-        resume.personalInfo.name?.toLowerCase().includes(searchTermLower) ||
-        resume.personalInfo.email?.toLowerCase().includes(searchTermLower) ||
-        resume.skills?.some(skill => skill.toLowerCase().includes(searchTermLower)) ||
-        resume.experience?.some(exp => 
-          exp.title.toLowerCase().includes(searchTermLower) ||
-          exp.company.toLowerCase().includes(searchTermLower)
+    // Apply search term filter
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      filtered = filtered.filter(
+        (resume) =>
+          resume?.personalInfo?.name?.toLowerCase().includes(term) ||
+          resume?.personalInfo?.email?.toLowerCase().includes(term) ||
+          resume?.skills.some((skill) => skill.toLowerCase().includes(term))
+      );
+    }
+
+    // Apply skill filter
+    if (skillFilter) {
+      filtered = filtered.filter((resume) =>
+        resume.skills.some((skill) =>
+          skill.toLowerCase().includes(skillFilter.toLowerCase())
         )
       );
-    });
-  }, [resumeData, searchTerm]);
+    }
+
+    // Apply location filter
+    if (locationFilter) {
+      filtered = filtered.filter((resume) =>
+        resume.personalInfo.location
+          ?.toLowerCase()
+          .includes(locationFilter.toLowerCase())
+      );
+    }
+
+    // Apply experience filter
+    if (experienceFilter) {
+      filtered = filtered.filter((resume) =>
+        resume.experience.some(
+          (exp) =>
+            exp.title.toLowerCase().includes(experienceFilter.toLowerCase()) ||
+            exp.company.toLowerCase().includes(experienceFilter.toLowerCase())
+        )
+      );
+    }
+
+    return filtered;
+  }, [resumeData, searchTerm, skillFilter, locationFilter, experienceFilter]);
 
   return (
     <div className="container mx-auto py-10 space-y-8">
@@ -172,22 +206,66 @@ export default function Home() {
 
       {resumeData.length > 0 && (
         <Card className="p-6">
-          <div className="space-y-4">
+          <div className="space-y-6">
             <div className="flex justify-between items-center">
               <h2 className="text-2xl font-semibold">Parsed Resumes</h2>
-              <Input
-                placeholder="Search resumes..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="max-w-xs"
-              />
+              <div className="flex gap-4">
+                <Input
+                  placeholder="Search..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="max-w-xs"
+                />
+                <Select value={filterType} onValueChange={setFilterType}>
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Filter by..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All</SelectItem>
+                    <SelectItem value="skills">Skills</SelectItem>
+                    <SelectItem value="location">Location</SelectItem>
+                    <SelectItem value="experience">Experience</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
+
+            {filterType !== "all" && (
+              <div className="flex gap-4">
+                {filterType === "skills" && (
+                  <Input
+                    placeholder="Filter by skills..."
+                    value={skillFilter}
+                    onChange={(e) => setSkillFilter(e.target.value)}
+                    className="max-w-xs"
+                  />
+                )}
+                {filterType === "location" && (
+                  <Input
+                    placeholder="Filter by location..."
+                    value={locationFilter}
+                    onChange={(e) => setLocationFilter(e.target.value)}
+                    className="max-w-xs"
+                  />
+                )}
+                {filterType === "experience" && (
+                  <Input
+                    placeholder="Filter by experience..."
+                    value={experienceFilter}
+                    onChange={(e) => setExperienceFilter(e.target.value)}
+                    className="max-w-xs"
+                  />
+                )}
+              </div>
+            )}
+
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Location</TableHead>
+                  <TableHead>Education</TableHead>
                   <TableHead>Skills</TableHead>
                   <TableHead>Experience</TableHead>
                   <TableHead>Resume</TableHead>
@@ -196,9 +274,16 @@ export default function Home() {
               <TableBody>
                 {filteredResumes().map((resume, index) => (
                   <TableRow key={index}>
-                    <TableCell>{resume.personalInfo.name}</TableCell>
-                    <TableCell>{resume.personalInfo.email}</TableCell>
-                    <TableCell>{resume.personalInfo.location}</TableCell>
+                    <TableCell>{resume?.personalInfo?.name}</TableCell>
+                    <TableCell>{resume?.personalInfo?.email}</TableCell>
+                    <TableCell>{resume?.personalInfo?.location}</TableCell>
+                    <TableCell>
+                      {resume.education.map((edu, idx) => (
+                        <div key={idx} className="text-sm">
+                          {edu.degree} - {edu.institution}
+                        </div>
+                      ))}
+                    </TableCell>
                     <TableCell>
                       <div className="flex flex-wrap gap-1">
                         {resume.skills.slice(0, 3).map((skill, idx) => (
