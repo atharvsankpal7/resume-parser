@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -18,6 +19,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useToast } from "@/hooks/use-toast";
+import { exportToExcel, prepareResumeDataForExcel } from "@/lib/excel";
 
 interface ResumeData {
   personalInfo: {
@@ -56,6 +59,7 @@ export default function AllResumes() {
   const [skillFilter, setSkillFilter] = useState("");
   const [locationFilter, setLocationFilter] = useState("");
   const [experienceFilter, setExperienceFilter] = useState("");
+  const { toast } = useToast();
 
   useEffect(() => {
     const fetchResumes = async () => {
@@ -119,12 +123,66 @@ export default function AllResumes() {
     setFilteredResumes(filtered);
   }, [resumes, searchTerm, skillFilter, locationFilter, experienceFilter]);
 
+  // Handler to clear all filters
+  const clearFilters = () => {
+    setSearchTerm("");
+    setSkillFilter("");
+    setLocationFilter("");
+    setExperienceFilter("");
+    setFilterType("all");
+  };
+
+  // Handle filter type change
+  const handleFilterTypeChange = (value: string) => {
+    setFilterType(value);
+    // Clear the specific filters when changing filter type
+    if (value === "all") {
+      setSkillFilter("");
+      setLocationFilter("");
+      setExperienceFilter("");
+    }
+  };
+
+  // Handle export to Excel
+  const handleExport = () => {
+    if (filteredResumes.length === 0) {
+      toast({
+        title: "No Data",
+        description: "There is no data to export.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const excelData = prepareResumeDataForExcel(filteredResumes);
+    exportToExcel(excelData, {
+      filename: 'all-resumes.xlsx',
+      sheetName: 'Resumes'
+    });
+
+    toast({
+      title: "Success",
+      description: `Successfully exported ${filteredResumes.length} resumes to Excel.`,
+    });
+  };
+
   return (
     <div className="container mx-auto py-10 space-y-8">
       <Card className="p-6">
         <div className="space-y-6">
           <div className="flex justify-between items-center">
-            <h1 className="text-3xl font-bold">All Resumes</h1>
+            <div className="flex items-center gap-4">
+              <h1 className="text-3xl font-bold">
+                All Resumes ({filteredResumes.length} of {resumes.length})
+              </h1>
+              <Button
+                variant="outline"
+                onClick={handleExport}
+                className="ml-4"
+              >
+                Export to Excel
+              </Button>
+            </div>
             <div className="flex gap-4">
               <Input
                 placeholder="Search..."
@@ -132,7 +190,10 @@ export default function AllResumes() {
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="max-w-xs"
               />
-              <Select value={filterType} onValueChange={setFilterType}>
+              <Select 
+                value={filterType} 
+                onValueChange={handleFilterTypeChange}
+              >
                 <SelectTrigger className="w-[180px]">
                   <SelectValue placeholder="Filter by..." />
                 </SelectTrigger>
@@ -143,6 +204,11 @@ export default function AllResumes() {
                   <SelectItem value="experience">Experience</SelectItem>
                 </SelectContent>
               </Select>
+              {(searchTerm || skillFilter || locationFilter || experienceFilter) && (
+                <Button variant="outline" onClick={clearFilters}>
+                  Clear Filters
+                </Button>
+              )}
             </div>
           </div>
 

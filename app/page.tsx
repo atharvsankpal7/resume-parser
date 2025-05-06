@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { exportToExcel, prepareResumeDataForExcel } from "@/lib/excel";
 
 interface ResumeData {
   personalInfo: {
@@ -103,7 +104,18 @@ export default function Home() {
     }
   };
 
+  // Handler to clear all filters
+  const clearFilters = () => {
+    setSearchTerm("");
+    setSkillFilter("");
+    setLocationFilter("");
+    setExperienceFilter("");
+    setFilterType("all");
+  };
+
+  // Updated filteredResumes function to always start from the original data
   const filteredResumes = useCallback(() => {
+    // Always start with the original data
     let filtered = [...resumeData];
 
     // Apply search term filter
@@ -117,7 +129,7 @@ export default function Home() {
       );
     }
 
-    // Apply skill filter
+    // Apply skill filter only if it exists
     if (skillFilter) {
       filtered = filtered.filter((resume) =>
         resume.skills.some((skill) =>
@@ -126,7 +138,7 @@ export default function Home() {
       );
     }
 
-    // Apply location filter
+    // Apply location filter only if it exists
     if (locationFilter) {
       filtered = filtered.filter((resume) =>
         resume.personalInfo.location
@@ -135,7 +147,7 @@ export default function Home() {
       );
     }
 
-    // Apply experience filter
+    // Apply experience filter only if it exists
     if (experienceFilter) {
       filtered = filtered.filter((resume) =>
         resume.experience.some(
@@ -148,6 +160,41 @@ export default function Home() {
 
     return filtered;
   }, [resumeData, searchTerm, skillFilter, locationFilter, experienceFilter]);
+
+  // Handle filter type change
+  const handleFilterTypeChange = (value: string) => {
+    setFilterType(value);
+    // Clear the specific filters when changing filter type
+    if (value === "all") {
+      setSkillFilter("");
+      setLocationFilter("");
+      setExperienceFilter("");
+    }
+  };
+
+  // Handle export to Excel
+  const handleExport = () => {
+    const currentData = filteredResumes();
+    if (currentData.length === 0) {
+      toast({
+        title: "No Data",
+        description: "There is no data to export.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const excelData = prepareResumeDataForExcel(currentData);
+    exportToExcel(excelData, {
+      filename: 'resumes.xlsx',
+      sheetName: 'Resumes'
+    });
+
+    toast({
+      title: "Success",
+      description: `Successfully exported ${currentData.length} resumes to Excel.`,
+    });
+  };
 
   return (
     <div className="container mx-auto py-10 space-y-8">
@@ -208,7 +255,18 @@ export default function Home() {
         <Card className="p-6">
           <div className="space-y-6">
             <div className="flex justify-between items-center">
-              <h2 className="text-2xl font-semibold">Parsed Resumes</h2>
+              <div className="flex items-center gap-4">
+                <h2 className="text-2xl font-semibold">
+                  Parsed Resumes ({filteredResumes().length} of {resumeData.length})
+                </h2>
+                <Button
+                  variant="outline"
+                  onClick={handleExport}
+                  className="ml-4"
+                >
+                  Export to Excel
+                </Button>
+              </div>
               <div className="flex gap-4">
                 <Input
                   placeholder="Search..."
@@ -216,7 +274,10 @@ export default function Home() {
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="max-w-xs"
                 />
-                <Select value={filterType} onValueChange={setFilterType}>
+                <Select 
+                  value={filterType} 
+                  onValueChange={handleFilterTypeChange}
+                >
                   <SelectTrigger className="w-[180px]">
                     <SelectValue placeholder="Filter by..." />
                   </SelectTrigger>
@@ -227,6 +288,11 @@ export default function Home() {
                     <SelectItem value="experience">Experience</SelectItem>
                   </SelectContent>
                 </Select>
+                {(searchTerm || skillFilter || locationFilter || experienceFilter) && (
+                  <Button variant="outline" onClick={clearFilters}>
+                    Clear Filters
+                  </Button>
+                )}
               </div>
             </div>
 
