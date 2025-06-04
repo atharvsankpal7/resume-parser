@@ -4,6 +4,7 @@ import mammoth from "mammoth";
 import cloudinary from "@/lib/cloudinary";
 import dbConnect from "@/lib/mongoose";
 import Resume from "@/models/Resume";
+import { v4 as uuidv4 } from "uuid";
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY || "");
 
@@ -29,7 +30,6 @@ async function uploadToCloudinary(
         else resolve(result!.secure_url);
       }
     );
-
     uploadStream.end(buffer);
   });
 }
@@ -68,8 +68,13 @@ export async function POST(request: NextRequest) {
     const buffer = Buffer.from(bytes);
 
     // Upload file to Cloudinary
-    const fileUrl = await uploadToCloudinary(buffer, file.type === "application/pdf" ? "raw" : file.type);
+    const fileUrl = await uploadToCloudinary(
+      buffer,
+      file.type === "application/pdf" ? "raw" : file.type
+    );
+
     let fileContent = "";
+
     if (
       file.type ===
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -82,7 +87,7 @@ export async function POST(request: NextRequest) {
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
     const prompt = `
-      Analyze the following resume content and extract key information in the following JSON format don't include any other text in your response not even the word "JSON" in your response cause we are directly going to parse your response to get the data :
+      Analyze the following resume content and extract key information in the following JSON format. Don't include any other text in your response — not even the word "JSON" — because we are directly going to parse your response to get the data:
       {
         "personalInfo": {
           "name": "",
@@ -113,7 +118,7 @@ export async function POST(request: NextRequest) {
             "technologies": []
           }
         ],
-        "skills": [](make this skills in lowercase),
+        "skills": [],
         "certifications": []
       }
 
@@ -142,9 +147,12 @@ export async function POST(request: NextRequest) {
     const response = result.response;
     let responseText = response.text();
     responseText = responseText.replace("`json", "").replaceAll("`", "");
-    let parsedData = JSON.parse(responseText);
-    // Save to MongoDB
+
+    const parsedData = JSON.parse(responseText);
+
+    // Construct resume data with UUID
     const resumeData = {
+      uuid: uuidv4(),
       ...parsedData,
       fileUrl,
     };

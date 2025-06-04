@@ -1,8 +1,6 @@
 "use client";
-
 import type React from "react";
-
-import { useState, useCallback } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   Upload,
   Trash2,
@@ -37,9 +35,20 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { exportToExcel, prepareResumeDataForExcel } from "@/lib/excel";
+import { create } from "zustand";
+
+// Zustand store for resume management
+interface ResumeStore {
+  resumeData: ResumeData[];
+  selectedJD: File | null;
+  addResumes: (newResumes: ResumeData[]) => void;
+  deleteResume: (id: string) => void;
+  setSelectedJD: (file: File | null) => void;
+  setResumeData: (resumes: ResumeData[]) => void;
+}
 
 interface ResumeData {
-  _id: string;
+  uuid: string;
   personalInfo: {
     name: string;
     email: string;
@@ -70,27 +79,58 @@ interface ResumeData {
   matchExplanation?: string;
 }
 
+const useResumeStore = create<ResumeStore>((set) => ({
+  resumeData: [],
+  selectedJD: null,
+  addResumes: (newResumes) => 
+    set((state) => ({ 
+      resumeData: [...state.resumeData, ...newResumes] 
+    })),
+  deleteResume: (id) => 
+    set((state) => ({
+      resumeData: state.resumeData.filter(resume => resume.uuid !== id)
+    })),
+  setSelectedJD: (file) => set({ selectedJD: file }),
+  setResumeData: (resumes) => set({ resumeData: resumes }),
+}));
+
 export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
-  const [selectedJD, setSelectedJD] = useState<File | null>(null);
-  const [resumeData, setResumeData] = useState<ResumeData[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedLocation, setSelectedLocation] = useState("");
   const [selectedEducation, setSelectedEducation] = useState("");
   const [selectedSkill, setSelectedSkill] = useState("");
   const { toast } = useToast();
+  
+  // Zustand store hooks
+  const { 
+    resumeData, 
+    selectedJD, 
+    addResumes, 
+    deleteResume, 
+    setSelectedJD, 
+    setResumeData 
+  } = useResumeStore();
 
-  // Extract unique values for dropdowns
-  const locations = Array.from(
-    new Set(resumeData.map((r) => r.personalInfo.location))
-  ).filter(Boolean);
-  const educationLevels = Array.from(
-    new Set(resumeData.flatMap((r) => r.education.map((e) => e.degree)))
-  ).filter(Boolean);
-  const skills = Array.from(
-    new Set(resumeData.flatMap((r) => r.skills))
-  ).filter(Boolean);
+  // Extract unique values for dropdowns with memoization
+  const locations = useMemo(() => {
+    return Array.from(
+      new Set(resumeData.map((r) => r.personalInfo?.location).filter(Boolean))
+    );
+  }, [resumeData]);
+
+  const educationLevels = useMemo(() => {
+    return Array.from(
+      new Set(resumeData.flatMap((r) => r.education?.map((e) => e.degree) || []).filter(Boolean))
+    );
+  }, [resumeData]);
+
+  const skills = useMemo(() => {
+    return Array.from(
+      new Set(resumeData.flatMap((r: { skills: any; }) => r.skills || []).filter(Boolean))
+    );
+  }, [resumeData]);
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files) {
@@ -134,10 +174,13 @@ export default function Home() {
       });
 
       const results = await Promise.all(uploadPromises);
-      setResumeData(results);
-
+      
+      // Add new resumes to store
+      addResumes(results);
+      
+      // If JD is selected, match it with the complete dataset
       if (selectedJD) {
-        await matchJobDescription(results);
+        matchJobDescription();
       }
 
       toast({
@@ -145,6 +188,7 @@ export default function Home() {
         description: `Successfully processed ${results.length} resumes!`,
       });
     } catch (error) {
+      console.error("Upload error:", error);
       toast({
         title: "Error",
         description: "Failed to process some resumes. Please try again.",
@@ -156,11 +200,20 @@ export default function Home() {
     }
   };
 
-  const matchJobDescription = async (resumes: ResumeData[] = resumeData) => {
+  const matchJobDescription = async () => {
     if (!selectedJD) {
       toast({
         title: "Error",
         description: "Please select a job description file",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (resumeData.length === 0) {
+      toast({
+        title: "Error",
+        description: "No resumes to match",
         variant: "destructive",
       });
       return;
@@ -171,7 +224,7 @@ export default function Home() {
     try {
       const formData = new FormData();
       formData.append("jdFile", selectedJD);
-      formData.append("resumes", JSON.stringify(resumes));
+      formData.append("resumes", JSON.stringify(resumeData));
 
       const response = await fetch("/api/match-jd", {
         method: "POST",
@@ -190,6 +243,7 @@ export default function Home() {
         description: "Successfully matched resumes with job description!",
       });
     } catch (error) {
+      console.error("Match JD error:", error);
       toast({
         title: "Error",
         description: "Failed to match job description. Please try again.",
@@ -201,18 +255,17 @@ export default function Home() {
   };
 
   const handleDelete = (id: string, event: React.MouseEvent) => {
-    // Prevent default button behavior and event bubbling
     event.preventDefault();
     event.stopPropagation();
 
     try {
-      setResumeData((prev) => prev.filter((resume) => resume._id !== id));
-
+      deleteResume(id);
       toast({
         title: "Success",
         description: "Resume deleted successfully",
       });
     } catch (error) {
+      console.error("Delete error:", error);
       toast({
         title: "Error",
         description: "Failed to delete resume",
@@ -228,8 +281,12 @@ export default function Home() {
     setSelectedSkill("");
   };
 
-  const filteredResumes = useCallback(() => {
+  // Fixed filteredResumes with useMemo instead of useCallback
+  const filteredResumes = useMemo(() => {
     return resumeData.filter((resume) => {
+      // Null safety checks
+      if (!resume?.personalInfo) return false;
+
       const matchesSearch =
         !searchTerm ||
         resume.personalInfo.name
@@ -238,7 +295,7 @@ export default function Home() {
         resume.personalInfo.email
           ?.toLowerCase()
           .includes(searchTerm.toLowerCase()) ||
-        resume.skills.some((skill) =>
+        (resume.skills || []).some((skill) =>
           skill.toLowerCase().includes(searchTerm.toLowerCase())
         );
 
@@ -247,10 +304,10 @@ export default function Home() {
 
       const matchesEducation =
         !selectedEducation ||
-        resume.education.some((edu) => edu.degree === selectedEducation);
+        (resume.education || []).some((edu) => edu.degree === selectedEducation);
 
       const matchesSkill =
-        !selectedSkill || resume.skills.includes(selectedSkill);
+        !selectedSkill || (resume.skills || []).includes(selectedSkill);
 
       return (
         matchesSearch && matchesLocation && matchesEducation && matchesSkill
@@ -265,8 +322,7 @@ export default function Home() {
   ]);
 
   const handleExport = () => {
-    const currentData = filteredResumes();
-    if (currentData.length === 0) {
+    if (filteredResumes.length === 0) {
       toast({
         title: "No Data",
         description: "There is no data to export.",
@@ -275,16 +331,25 @@ export default function Home() {
       return;
     }
 
-    const excelData = prepareResumeDataForExcel(currentData);
-    exportToExcel(excelData, {
-      filename: "resumes.xlsx",
-      sheetName: "Resumes",
-    });
+    try {
+      const excelData = prepareResumeDataForExcel(filteredResumes);
+      exportToExcel(excelData, {
+        filename: "resumes.xlsx",
+        sheetName: "Resumes",
+      });
 
-    toast({
-      title: "Success",
-      description: `Successfully exported ${currentData.length} resumes to Excel.`,
-    });
+      toast({
+        title: "Success",
+        description: `Successfully exported ${filteredResumes.length} resumes to Excel.`,
+      });
+    } catch (error) {
+      console.error("Export error:", error);
+      toast({
+        title: "Error",
+        description: "Failed to export resumes",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -411,7 +476,7 @@ export default function Home() {
                       Parsed Resumes
                     </CardTitle>
                     <p className="text-slate-600">
-                      {filteredResumes().length} of {resumeData.length} resumes
+                      {filteredResumes.length} of {resumeData.length} resumes
                     </p>
                   </div>
                 </div>
@@ -543,9 +608,9 @@ export default function Home() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredResumes().map((resume, index) => (
+                    {filteredResumes.map((resume, index) => (
                       <TableRow
-                        key={resume._id}
+                        key={resume.uuid}
                         className={
                           index % 2 === 0 ? "bg-white" : "bg-slate-50/50"
                         }
@@ -564,41 +629,46 @@ export default function Home() {
                                   }`}
                                 />
                                 <span className="font-bold text-lg">
-                                  {resume.matchScore}%
+                                  {resume.matchScore || 0}%
                                 </span>
                               </div>
-                              <span className="text-xs text-slate-500 max-w-32 truncate">
-                                {resume.matchExplanation}
-                              </span>
+                              {resume.matchExplanation && (
+                                <span className="text-xs text-slate-500 max-w-32 truncate">
+                                  {resume.matchExplanation}
+                                </span>
+                              )}
                             </div>
                           </TableCell>
                         )}
                         <TableCell className="font-medium text-slate-800">
-                          {resume?.personalInfo?.name}
+                          {resume?.personalInfo?.name || 'N/A'}
                         </TableCell>
                         <TableCell className="text-slate-600">
-                          {resume?.personalInfo?.email}
+                          {resume?.personalInfo?.email || 'N/A'}
                         </TableCell>
                         <TableCell className="text-slate-600">
-                          {resume?.personalInfo?.location}
+                          {resume?.personalInfo?.location || 'N/A'}
                         </TableCell>
                         <TableCell>
                           <div className="space-y-1">
-                            {resume.education.map((edu, idx) => (
+                            {(resume.education || []).map((edu, idx) => (
                               <div key={idx} className="text-sm">
                                 <div className="font-medium text-slate-700">
-                                  {edu.degree}
+                                  {edu.degree || 'N/A'}
                                 </div>
                                 <div className="text-slate-500">
-                                  {edu.institution}
+                                  {edu.institution || 'N/A'}
                                 </div>
                               </div>
                             ))}
+                            {(!resume.education || resume.education.length === 0) && (
+                              <div className="text-sm text-slate-500">No education data</div>
+                            )}
                           </div>
                         </TableCell>
                         <TableCell>
                           <div className="flex flex-wrap gap-1">
-                            {resume.skills.slice(0, 3).map((skill, idx) => (
+                            {(resume.skills || []).slice(0, 3).map((skill, idx) => (
                               <Badge
                                 key={idx}
                                 variant="secondary"
@@ -607,7 +677,7 @@ export default function Home() {
                                 {skill}
                               </Badge>
                             ))}
-                            {resume.skills.length > 3 && (
+                            {(resume.skills || []).length > 3 && (
                               <Badge
                                 variant="outline"
                                 className="border-slate-300 text-slate-600"
@@ -615,51 +685,61 @@ export default function Home() {
                                 +{resume.skills.length - 3}
                               </Badge>
                             )}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="space-y-1">
-                            {resume.experience.slice(0, 2).map((exp, idx) => (
-                              <div key={idx} className="text-sm">
-                                <div className="font-medium text-slate-700">
-                                  {exp.title}
-                                </div>
-                                <div className="text-slate-500">
-                                  {exp.company}
-                                </div>
-                              </div>
-                            ))}
-                            {resume.experience.length > 2 && (
-                              <div className="text-xs text-slate-400">
-                                +{resume.experience.length - 2} more
-                              </div>
+                            {(!resume.skills || resume.skills.length === 0) && (
+                              <div className="text-sm text-slate-500">No skills listed</div>
                             )}
                           </div>
                         </TableCell>
                         <TableCell>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            asChild
-                            className="border-blue-300 text-blue-600 hover:bg-blue-50"
-                          >
-                            <a
-                              href={resume.fileUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
+                          <div className="space-y-1">
+                            {(resume.experience || []).slice(0, 2).map((exp, idx) => (
+                              <div key={idx} className="text-sm">
+                                <div className="font-medium text-slate-700">
+                                  {exp.title || 'N/A'}
+                                </div>
+                                <div className="text-slate-500">
+                                  {exp.company || 'N/A'}
+                                </div>
+                              </div>
+                            ))}
+                            {(resume.experience || []).length > 2 && (
+                              <div className="text-xs text-slate-400">
+                                +{resume.experience.length - 2} more
+                              </div>
+                            )}
+                            {(!resume.experience || resume.experience.length === 0) && (
+                              <div className="text-sm text-slate-500">No experience data</div>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {resume.fileUrl ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              asChild
+                              className="border-blue-300 text-blue-600 hover:bg-blue-50"
                             >
-                              <FileText className="w-4 h-4 mr-1" />
-                              View
-                            </a>
-                          </Button>
+                              <a
+                                href={resume.fileUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                <FileText className="w-4 h-4 mr-1" />
+                                View
+                              </a>
+                            </Button>
+                          ) : (
+                            <span className="text-sm text-slate-500">No file</span>
+                          )}
                         </TableCell>
                         <TableCell>
                           <Button
                             variant="ghost"
                             size="icon"
-                            onClick={(event) => handleDelete(resume._id, event)}
+                            onClick={(event) => handleDelete(resume.uuid, event)}
                             className="text-red-500 hover:text-red-700 hover:bg-red-50"
-                            type="button" // Add this to ensure it's not a submit button
+                            type="button"
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
