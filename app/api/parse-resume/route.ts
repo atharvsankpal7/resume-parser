@@ -5,6 +5,7 @@ import cloudinary from "@/lib/cloudinary";
 import dbConnect from "@/lib/mongoose";
 import Resume from "@/models/Resume";
 import { v4 as uuidv4 } from "uuid";
+export const dynamic = 'force-dynamic';
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY || "");
 
