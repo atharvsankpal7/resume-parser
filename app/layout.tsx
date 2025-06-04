@@ -6,7 +6,7 @@ import Link from 'next/link';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'Resume Parser',
+  title: 'Resume Parsing',
   description: 'Parse and analyze resumes with AI',
 };
 
@@ -22,7 +22,7 @@ export default function RootLayout({
           <div className="container mx-auto px-4 py-4">
             <div className="flex justify-between items-center">
               <Link href="/" className="text-xl font-bold">
-                Resume Parser
+                Resume Parsing
               </Link>
               <Link 
                 href="/all-resumes" 

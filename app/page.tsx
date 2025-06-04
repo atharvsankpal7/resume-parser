@@ -1,15 +1,45 @@
 "use client";
 
+import type React from "react";
+
 import { useState, useCallback } from "react";
-import { Upload } from "lucide-react";
+import {
+  Upload,
+  Trash2,
+  FileText,
+  Users,
+  Filter,
+  Download,
+  Sparkles,
+  Search,
+  MapPin,
+  GraduationCap,
+  Code,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { exportToExcel, prepareResumeDataForExcel } from "@/lib/excel";
 
 interface ResumeData {
+  _id: string;
   personalInfo: {
     name: string;
     email: string;
@@ -40,25 +70,27 @@ interface ResumeData {
   matchExplanation?: string;
 }
 
-interface Filters {
-  search: string;
-  skills: string;
-  location: string;
-  experience: string;
-}
-
 export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [selectedJD, setSelectedJD] = useState<File | null>(null);
   const [resumeData, setResumeData] = useState<ResumeData[]>([]);
-  const [filters, setFilters] = useState<Filters>({
-    search: "",
-    skills: "",
-    location: "",
-    experience: ""
-  });
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedLocation, setSelectedLocation] = useState("");
+  const [selectedEducation, setSelectedEducation] = useState("");
+  const [selectedSkill, setSelectedSkill] = useState("");
   const { toast } = useToast();
+
+  // Extract unique values for dropdowns
+  const locations = Array.from(
+    new Set(resumeData.map((r) => r.personalInfo.location))
+  ).filter(Boolean);
+  const educationLevels = Array.from(
+    new Set(resumeData.flatMap((r) => r.education.map((e) => e.degree)))
+  ).filter(Boolean);
+  const skills = Array.from(
+    new Set(resumeData.flatMap((r) => r.skills))
+  ).filter(Boolean);
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files) {
@@ -103,8 +135,7 @@ export default function Home() {
 
       const results = await Promise.all(uploadPromises);
       setResumeData(results);
-      
-      // If JD is selected, process it immediately after resumes are uploaded
+
       if (selectedJD) {
         await matchJobDescription(results);
       }
@@ -169,46 +200,69 @@ export default function Home() {
     }
   };
 
-  const handleFilterChange = (key: keyof Filters, value: string) => {
-    setFilters(prev => ({
-      ...prev,
-      [key]: value
-    }));
+  const handleDelete = (id: string, event: React.MouseEvent) => {
+    // Prevent default button behavior and event bubbling
+    event.preventDefault();
+    event.stopPropagation();
+
+    try {
+      setResumeData((prev) => prev.filter((resume) => resume._id !== id));
+
+      toast({
+        title: "Success",
+        description: "Resume deleted successfully",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete resume",
+        variant: "destructive",
+      });
+    }
   };
 
   const clearFilters = () => {
-    setFilters({
-      search: "",
-      skills: "",
-      location: "",
-      experience: ""
-    });
+    setSearchTerm("");
+    setSelectedLocation("");
+    setSelectedEducation("");
+    setSelectedSkill("");
   };
 
   const filteredResumes = useCallback(() => {
-    return resumeData.filter(resume => {
-      const matchesSearch = !filters.search || 
-        resume.personalInfo.name?.toLowerCase().includes(filters.search.toLowerCase()) ||
-        resume.personalInfo.email?.toLowerCase().includes(filters.search.toLowerCase()) ||
-        resume.skills.some(skill => skill.toLowerCase().includes(filters.search.toLowerCase()));
-
-      const matchesSkills = !filters.skills ||
-        resume.skills.some(skill => 
-          skill.toLowerCase().includes(filters.skills.toLowerCase())
+    return resumeData.filter((resume) => {
+      const matchesSearch =
+        !searchTerm ||
+        resume.personalInfo.name
+          ?.toLowerCase()
+          .includes(searchTerm.toLowerCase()) ||
+        resume.personalInfo.email
+          ?.toLowerCase()
+          .includes(searchTerm.toLowerCase()) ||
+        resume.skills.some((skill) =>
+          skill.toLowerCase().includes(searchTerm.toLowerCase())
         );
 
-      const matchesLocation = !filters.location ||
-        resume.personalInfo.location?.toLowerCase().includes(filters.location.toLowerCase());
+      const matchesLocation =
+        !selectedLocation || resume.personalInfo.location === selectedLocation;
 
-      const matchesExperience = !filters.experience ||
-        resume.experience.some(exp =>
-          exp.title.toLowerCase().includes(filters.experience.toLowerCase()) ||
-          exp.company.toLowerCase().includes(filters.experience.toLowerCase())
-        );
+      const matchesEducation =
+        !selectedEducation ||
+        resume.education.some((edu) => edu.degree === selectedEducation);
 
-      return matchesSearch && matchesSkills && matchesLocation && matchesExperience;
+      const matchesSkill =
+        !selectedSkill || resume.skills.includes(selectedSkill);
+
+      return (
+        matchesSearch && matchesLocation && matchesEducation && matchesSkill
+      );
     });
-  }, [resumeData, filters]);
+  }, [
+    resumeData,
+    searchTerm,
+    selectedLocation,
+    selectedEducation,
+    selectedSkill,
+  ]);
 
   const handleExport = () => {
     const currentData = filteredResumes();
@@ -223,8 +277,8 @@ export default function Home() {
 
     const excelData = prepareResumeDataForExcel(currentData);
     exportToExcel(excelData, {
-      filename: 'resumes.xlsx',
-      sheetName: 'Resumes'
+      filename: "resumes.xlsx",
+      sheetName: "Resumes",
     });
 
     toast({
@@ -233,211 +287,392 @@ export default function Home() {
     });
   };
 
-  const activeFiltersCount = Object.values(filters).filter(Boolean).length;
-
   return (
-    <div className="container mx-auto py-10 space-y-8">
-      <Card className="p-6">
-        <div className="flex flex-col items-center justify-center space-y-4">
-          <h1 className="text-3xl font-bold">Resume Parser</h1>
-          <p className="text-muted-foreground">
-            Upload multiple resumes in PDF, TXT, DOCX, or image format
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
+      <div className="container mx-auto py-8 px-4 space-y-8">
+        {/* Header */}
+        <div className="text-center space-y-4">
+          <div className="flex items-center justify-center gap-3">
+            <div className="p-3 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl">
+              <FileText className="w-8 h-8 text-white" />
+            </div>
+            <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+              Resume Parsing
+            </h1>
+          </div>
+          <p className="text-lg text-slate-600 max-w-2xl mx-auto">
+            Upload multiple resumes and match them with job descriptions using
+            AI-powered analysis
           </p>
-          <div className="flex items-center justify-center w-full">
-            <label
-              htmlFor="file-upload"
-              className="flex flex-col items-center justify-center w-full h-64 border-2 border-dashed rounded-lg cursor-pointer bg-gray-50 dark:hover:bg-bray-800 dark:bg-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:hover:border-gray-500 dark:hover:bg-gray-600"
-            >
-              <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                <Upload className="w-10 h-10 mb-3 text-gray-400" />
-                <p className="mb-2 text-sm text-gray-500 dark:text-gray-400">
-                  <span className="font-semibold">Click to upload</span> or drag and drop
-                </p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  PDF, TXT, DOCX, or Image files
-                </p>
-                {selectedFiles.length > 0 && (
-                  <p className="mt-2 text-sm text-green-500">
-                    {selectedFiles.length} files selected
-                  </p>
+        </div>
+
+        {/* Upload Section */}
+        <Card className="border-0 shadow-xl bg-white/80 backdrop-blur-sm">
+          <CardContent className="p-8">
+            <div className="space-y-6">
+              {/* File Upload Area */}
+              <div className="relative">
+                <label
+                  htmlFor="file-upload"
+                  className="group flex flex-col items-center justify-center w-full h-64 border-2 border-dashed border-blue-300 rounded-2xl cursor-pointer bg-gradient-to-br from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 transition-all duration-300 hover:border-blue-400"
+                >
+                  <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                    <div className="p-4 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full mb-4 group-hover:scale-110 transition-transform duration-300">
+                      <Upload className="w-8 h-8 text-white" />
+                    </div>
+                    <p className="mb-2 text-lg font-semibold text-slate-700">
+                      Drop your resumes here or{" "}
+                      <span className="text-blue-600">click to browse</span>
+                    </p>
+                    <p className="text-sm text-slate-500">
+                      Supports PDF, TXT, DOCX, and image files
+                    </p>
+                    {selectedFiles.length > 0 && (
+                      <div className="mt-4 flex items-center gap-2">
+                        <div className="flex items-center gap-2 px-4 py-2 bg-green-100 rounded-full">
+                          <Sparkles className="w-4 h-4 text-green-600" />
+                          <span className="text-sm font-medium text-green-700">
+                            {selectedFiles.length} files selected
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <input
+                    id="file-upload"
+                    type="file"
+                    className="hidden"
+                    accept=".pdf,.txt,.docx,.jpg,.jpeg,.png"
+                    onChange={handleFileSelect}
+                    multiple
+                    disabled={isLoading}
+                  />
+                </label>
+              </div>
+
+              {/* Job Description Upload */}
+              <div className="flex flex-col sm:flex-row gap-4 items-end">
+                <div className="flex-1">
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Job Description (Optional)
+                  </label>
+                  <Input
+                    type="file"
+                    accept=".pdf,.txt,.docx"
+                    onChange={handleJDSelect}
+                    className="border-slate-300 focus:border-blue-500 focus:ring-blue-500"
+                  />
+                </div>
+                {selectedJD && (
+                  <Button
+                    onClick={() => matchJobDescription()}
+                    disabled={isLoading || resumeData.length === 0}
+                    className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
+                  >
+                    <Sparkles className="w-4 h-4 mr-2" />
+                    Match JD
+                  </Button>
                 )}
               </div>
-              <input
-                id="file-upload"
-                type="file"
-                className="hidden"
-                accept=".pdf,.txt,.docx,.jpg,.jpeg,.png"
-                onChange={handleFileSelect}
-                multiple
-                disabled={isLoading}
-              />
-            </label>
-          </div>
 
-          <div className="w-full max-w-xl">
-            <div className="flex items-center gap-4">
-              <Input
-                type="file"
-                accept=".pdf,.txt,.docx"
-                onChange={handleJDSelect}
-                className="flex-1"
-                placeholder="Upload Job Description (Optional)"
-              />
-              {selectedJD && (
-                <Button
-                  onClick={() => matchJobDescription()}
-                  disabled={isLoading || resumeData.length === 0}
-                >
-                  Match JD
-                </Button>
-              )}
+              {/* Upload Button */}
+              <Button
+                onClick={handleUpload}
+                disabled={isLoading || selectedFiles.length === 0}
+                className="w-full h-12 text-lg font-semibold bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-lg hover:shadow-xl transition-all duration-300"
+              >
+                {isLoading ? (
+                  <>
+                    <div className="animate-spin mr-3 h-5 w-5 border-2 border-white border-t-transparent rounded-full" />
+                    Processing Resumes...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-5 h-5 mr-2" />
+                    Upload and Process Files
+                  </>
+                )}
+              </Button>
             </div>
-          </div>
+          </CardContent>
+        </Card>
 
-          <Button
-            onClick={handleUpload}
-            disabled={isLoading || selectedFiles.length === 0}
-            className="w-full max-w-xs"
-          >
-            {isLoading ? (
-              <>
-                <span className="animate-spin mr-2">⌛</span>
-                Processing...
-              </>
-            ) : (
-              'Upload and Process Files'
-            )}
-          </Button>
-        </div>
-      </Card>
-
-      {resumeData.length > 0 && (
-        <Card className="p-6">
-          <div className="space-y-6">
-            <div className="flex justify-between items-center">
-              <div className="flex items-center gap-4">
-                <h2 className="text-2xl font-semibold">
-                  Parsed Resumes ({filteredResumes().length} of {resumeData.length})
-                </h2>
+        {/* Results Section */}
+        {resumeData.length > 0 && (
+          <Card className="border-0 shadow-xl bg-white/80 backdrop-blur-sm">
+            <CardHeader className="pb-4">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-gradient-to-r from-green-500 to-emerald-500 rounded-lg">
+                    <Users className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-2xl font-bold text-slate-800">
+                      Parsed Resumes
+                    </CardTitle>
+                    <p className="text-slate-600">
+                      {filteredResumes().length} of {resumeData.length} resumes
+                    </p>
+                  </div>
+                </div>
                 <Button
-                  variant="outline"
                   onClick={handleExport}
-                  className="ml-4"
+                  className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700"
                 >
+                  <Download className="w-4 h-4 mr-2" />
                   Export to Excel
                 </Button>
               </div>
-              {activeFiltersCount > 0 && (
-                <Button variant="outline" onClick={clearFilters}>
-                  Clear All Filters ({activeFiltersCount})
-                </Button>
+            </CardHeader>
+
+            <CardContent className="space-y-6">
+              {/* Filters */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4" />
+                  <Input
+                    placeholder="Search resumes..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10 border-slate-300 focus:border-blue-500 focus:ring-blue-500"
+                  />
+                </div>
+
+                <Select
+                  value={selectedLocation}
+                  onValueChange={setSelectedLocation}
+                >
+                  <SelectTrigger className="border-slate-300 focus:border-blue-500 focus:ring-blue-500">
+                    <MapPin className="w-4 h-4 mr-2 text-slate-400" />
+                    <SelectValue placeholder="Location" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Locations</SelectItem>
+                    {locations.map((location) => (
+                      <SelectItem key={location} value={location}>
+                        {location}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Select
+                  value={selectedEducation}
+                  onValueChange={setSelectedEducation}
+                >
+                  <SelectTrigger className="border-slate-300 focus:border-blue-500 focus:ring-blue-500">
+                    <GraduationCap className="w-4 h-4 mr-2 text-slate-400" />
+                    <SelectValue placeholder="Education" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Education</SelectItem>
+                    {educationLevels.map((education) => (
+                      <SelectItem key={education} value={education}>
+                        {education}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Select value={selectedSkill} onValueChange={setSelectedSkill}>
+                  <SelectTrigger className="border-slate-300 focus:border-blue-500 focus:ring-blue-500">
+                    <Code className="w-4 h-4 mr-2 text-slate-400" />
+                    <SelectValue placeholder="Skills" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Skills</SelectItem>
+                    {skills.map((skill) => (
+                      <SelectItem key={skill} value={skill}>
+                        {skill}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {(searchTerm ||
+                selectedLocation ||
+                selectedEducation ||
+                selectedSkill) && (
+                <div className="flex justify-center">
+                  <Button
+                    variant="outline"
+                    onClick={clearFilters}
+                    className="border-slate-300 hover:bg-slate-50"
+                  >
+                    <Filter className="w-4 h-4 mr-2" />
+                    Clear Filters
+                  </Button>
+                </div>
               )}
-            </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <Input
-                placeholder="Search..."
-                value={filters.search}
-                onChange={(e) => handleFilterChange('search', e.target.value)}
-                className="w-full"
-              />
-              <Input
-                placeholder="Filter by skills..."
-                value={filters.skills}
-                onChange={(e) => handleFilterChange('skills', e.target.value)}
-                className="w-full"
-              />
-              <Input
-                placeholder="Filter by location..."
-                value={filters.location}
-                onChange={(e) => handleFilterChange('location', e.target.value)}
-                className="w-full"
-              />
-              <Input
-                placeholder="Filter by experience..."
-                value={filters.experience}
-                onChange={(e) => handleFilterChange('experience', e.target.value)}
-                className="w-full"
-              />
-            </div>
-
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  {selectedJD && <TableHead>Match Score</TableHead>}
-                  <TableHead>Name</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Location</TableHead>
-                  <TableHead>Education</TableHead>
-                  <TableHead>Skills</TableHead>
-                  <TableHead>Experience</TableHead>
-                  <TableHead>Resume</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredResumes().map((resume, index) => (
-                  <TableRow key={index}>
-                    {selectedJD && (
-                      <TableCell>
-                        <div className="flex flex-col">
-                          <span className="font-bold">{resume.matchScore}%</span>
-                          <span className="text-xs text-muted-foreground">
-                            {resume.matchExplanation}
-                          </span>
-                        </div>
-                      </TableCell>
-                    )}
-                    <TableCell>{resume?.personalInfo?.name}</TableCell>
-                    <TableCell>{resume?.personalInfo?.email}</TableCell>
-                    <TableCell>{resume?.personalInfo?.location}</TableCell>
-                    <TableCell>
-                      {resume.education.map((edu, idx) => (
-                        <div key={idx} className="text-sm">
-                          {edu.degree} - {edu.institution}
-                        </div>
-                      ))}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1">
-                        {resume.skills.slice(0, 3).map((skill, idx) => (
-                          <span
-                            key={idx}
-                            className="px-2 py-0.5 bg-primary/10 rounded-full text-xs"
-                          >
-                            {skill}
-                          </span>
-                        ))}
-                        {resume.skills.length > 3 && (
-                          <span className="px-2 py-0.5 bg-primary/10 rounded-full text-xs">
-                            +{resume.skills.length - 3}
-                          </span>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {resume.experience.map((exp, idx) => (
-                        <div key={idx} className="text-sm">
-                          {exp.title} at {exp.company}
-                        </div>
-                      ))}
-                    </TableCell>
-                    <TableCell>
-                      <a
-                        href={resume.fileUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-600 hover:underline"
+              {/* Table */}
+              <div className="rounded-xl border border-slate-200 overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-gradient-to-r from-slate-50 to-slate-100">
+                      {selectedJD && (
+                        <TableHead className="font-semibold text-slate-700">
+                          Match Score
+                        </TableHead>
+                      )}
+                      <TableHead className="font-semibold text-slate-700">
+                        Name
+                      </TableHead>
+                      <TableHead className="font-semibold text-slate-700">
+                        Email
+                      </TableHead>
+                      <TableHead className="font-semibold text-slate-700">
+                        Location
+                      </TableHead>
+                      <TableHead className="font-semibold text-slate-700">
+                        Education
+                      </TableHead>
+                      <TableHead className="font-semibold text-slate-700">
+                        Skills
+                      </TableHead>
+                      <TableHead className="font-semibold text-slate-700">
+                        Experience
+                      </TableHead>
+                      <TableHead className="font-semibold text-slate-700">
+                        Resume
+                      </TableHead>
+                      <TableHead className="font-semibold text-slate-700">
+                        Actions
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredResumes().map((resume, index) => (
+                      <TableRow
+                        key={resume._id}
+                        className={
+                          index % 2 === 0 ? "bg-white" : "bg-slate-50/50"
+                        }
                       >
-                        View
-                      </a>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        </Card>
-      )}
+                        {selectedJD && (
+                          <TableCell>
+                            <div className="flex flex-col gap-1">
+                              <div className="flex items-center gap-2">
+                                <div
+                                  className={`w-2 h-2 rounded-full ${
+                                    (resume.matchScore || 0) >= 80
+                                      ? "bg-green-500"
+                                      : (resume.matchScore || 0) >= 60
+                                      ? "bg-yellow-500"
+                                      : "bg-red-500"
+                                  }`}
+                                />
+                                <span className="font-bold text-lg">
+                                  {resume.matchScore}%
+                                </span>
+                              </div>
+                              <span className="text-xs text-slate-500 max-w-32 truncate">
+                                {resume.matchExplanation}
+                              </span>
+                            </div>
+                          </TableCell>
+                        )}
+                        <TableCell className="font-medium text-slate-800">
+                          {resume?.personalInfo?.name}
+                        </TableCell>
+                        <TableCell className="text-slate-600">
+                          {resume?.personalInfo?.email}
+                        </TableCell>
+                        <TableCell className="text-slate-600">
+                          {resume?.personalInfo?.location}
+                        </TableCell>
+                        <TableCell>
+                          <div className="space-y-1">
+                            {resume.education.map((edu, idx) => (
+                              <div key={idx} className="text-sm">
+                                <div className="font-medium text-slate-700">
+                                  {edu.degree}
+                                </div>
+                                <div className="text-slate-500">
+                                  {edu.institution}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1">
+                            {resume.skills.slice(0, 3).map((skill, idx) => (
+                              <Badge
+                                key={idx}
+                                variant="secondary"
+                                className="bg-blue-100 text-blue-700 hover:bg-blue-200"
+                              >
+                                {skill}
+                              </Badge>
+                            ))}
+                            {resume.skills.length > 3 && (
+                              <Badge
+                                variant="outline"
+                                className="border-slate-300 text-slate-600"
+                              >
+                                +{resume.skills.length - 3}
+                              </Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="space-y-1">
+                            {resume.experience.slice(0, 2).map((exp, idx) => (
+                              <div key={idx} className="text-sm">
+                                <div className="font-medium text-slate-700">
+                                  {exp.title}
+                                </div>
+                                <div className="text-slate-500">
+                                  {exp.company}
+                                </div>
+                              </div>
+                            ))}
+                            {resume.experience.length > 2 && (
+                              <div className="text-xs text-slate-400">
+                                +{resume.experience.length - 2} more
+                              </div>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            asChild
+                            className="border-blue-300 text-blue-600 hover:bg-blue-50"
+                          >
+                            <a
+                              href={resume.fileUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              <FileText className="w-4 h-4 mr-1" />
+                              View
+                            </a>
+                          </Button>
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={(event) => handleDelete(resume._id, event)}
+                            className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                            type="button" // Add this to ensure it's not a submit button
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
     </div>
   );
 }
