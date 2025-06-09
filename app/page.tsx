@@ -13,6 +13,8 @@ import {
   MapPin,
   GraduationCap,
   Code,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -94,13 +96,17 @@ const useResumeStore = create<ResumeStore>((set) => ({
   setResumeData: (resumes) => set({ resumeData: resumes }),
 }));
 
+interface FilterOption {
+  value: string;
+  label: string;
+  group: string;
+}
+
 export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedLocation, setSelectedLocation] = useState("");
-  const [selectedEducation, setSelectedEducation] = useState("");
-  const [selectedSkill, setSelectedSkill] = useState("");
+  const [selectedFilter, setSelectedFilter] = useState<string>("");
   const { toast } = useToast();
   
   // Zustand store hooks
@@ -131,6 +137,42 @@ export default function Home() {
       new Set(resumeData.flatMap((r: { skills: any; }) => r.skills || []).filter(Boolean))
     );
   }, [resumeData]);
+
+  // Create hierarchical filter options
+  const filterOptions = useMemo<FilterOption[]>(() => {
+    const options: FilterOption[] = [];
+    
+    // Location options
+    locations.forEach(location => {
+      options.push({
+        value: `location_${location}`,
+        label: location,
+        group: "Location"
+      });
+    });
+    
+    // Education options
+    educationLevels.forEach(education => {
+      options.push({
+        value: `education_${education}`,
+        label: education,
+        group: "Education"
+      });
+    });
+    
+    // Skills options
+    skills.forEach(skill => {
+      options.push({
+        value: `skill_${skill}`,
+        label: skill,
+        group: "Skills"
+      });
+    });
+    
+    // Other options could be added here
+    
+    return options;
+  }, [locations, educationLevels, skills]);
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files) {
@@ -276,9 +318,7 @@ export default function Home() {
 
   const clearFilters = () => {
     setSearchTerm("");
-    setSelectedLocation("");
-    setSelectedEducation("");
-    setSelectedSkill("");
+    setSelectedFilter("");
   };
 
   // Fixed filteredResumes with useMemo instead of useCallback
@@ -299,27 +339,29 @@ export default function Home() {
           skill.toLowerCase().includes(searchTerm.toLowerCase())
         );
 
-      const matchesLocation =
-        !selectedLocation || resume.personalInfo.location === selectedLocation;
+      // Handle the selected filter
+      let matchesFilter = true;
+      if (selectedFilter) {
+        const [filterType, filterValue] = selectedFilter.split('_');
+        
+        switch(filterType) {
+          case 'location':
+            matchesFilter = resume.personalInfo.location === filterValue;
+            break;
+          case 'education':
+            matchesFilter = (resume.education || []).some(edu => edu.degree === filterValue);
+            break;
+          case 'skill':
+            matchesFilter = (resume.skills || []).includes(filterValue);
+            break;
+          default:
+            matchesFilter = true;
+        }
+      }
 
-      const matchesEducation =
-        !selectedEducation ||
-        (resume.education || []).some((edu) => edu.degree === selectedEducation);
-
-      const matchesSkill =
-        !selectedSkill || (resume.skills || []).includes(selectedSkill);
-
-      return (
-        matchesSearch && matchesLocation && matchesEducation && matchesSkill
-      );
+      return matchesSearch && matchesFilter;
     });
-  }, [
-    resumeData,
-    searchTerm,
-    selectedLocation,
-    selectedEducation,
-    selectedSkill,
-  ]);
+  }, [resumeData, searchTerm, selectedFilter]);
 
   const handleExport = () => {
     if (filteredResumes.length === 0) {
@@ -351,6 +393,20 @@ export default function Home() {
       });
     }
   };
+
+  // Group options by category for the dropdown
+  const groupedOptions = useMemo(() => {
+    const groups: Record<string, FilterOption[]> = {};
+    
+    filterOptions.forEach(option => {
+      if (!groups[option.group]) {
+        groups[option.group] = [];
+      }
+      groups[option.group].push(option);
+    });
+    
+    return groups;
+  }, [filterOptions]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
@@ -492,7 +548,7 @@ export default function Home() {
 
             <CardContent className="space-y-6">
               {/* Filters */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4" />
                   <Input
@@ -504,61 +560,38 @@ export default function Home() {
                 </div>
 
                 <Select
-                  value={selectedLocation}
-                  onValueChange={setSelectedLocation}
+                  value={selectedFilter}
+                  onValueChange={setSelectedFilter}
                 >
                   <SelectTrigger className="border-slate-300 focus:border-blue-500 focus:ring-blue-500">
-                    <MapPin className="w-4 h-4 mr-2 text-slate-400" />
-                    <SelectValue placeholder="Location" />
+                    <Filter className="w-4 h-4 mr-2 text-slate-400" />
+                    <SelectValue placeholder="Filter by..." />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Locations</SelectItem>
-                    {locations.map((location) => (
-                      <SelectItem key={location} value={location}>
-                        {location}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                <Select
-                  value={selectedEducation}
-                  onValueChange={setSelectedEducation}
-                >
-                  <SelectTrigger className="border-slate-300 focus:border-blue-500 focus:ring-blue-500">
-                    <GraduationCap className="w-4 h-4 mr-2 text-slate-400" />
-                    <SelectValue placeholder="Education" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Education</SelectItem>
-                    {educationLevels.map((education) => (
-                      <SelectItem key={education} value={education}>
-                        {education}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                <Select value={selectedSkill} onValueChange={setSelectedSkill}>
-                  <SelectTrigger className="border-slate-300 focus:border-blue-500 focus:ring-blue-500">
-                    <Code className="w-4 h-4 mr-2 text-slate-400" />
-                    <SelectValue placeholder="Skills" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Skills</SelectItem>
-                    {skills.map((skill) => (
-                      <SelectItem key={skill} value={skill}>
-                        {skill}
-                      </SelectItem>
+                    <SelectItem value="all">All Filters</SelectItem>
+                    
+                    {Object.entries(groupedOptions).map(([group, options]) => (
+                      <div key={group}>
+                        <div className="px-2 py-1.5 text-sm font-medium text-slate-500 flex items-center">
+                          <ChevronRight className="w-4 h-4 mr-1" />
+                          {group}
+                        </div>
+                        {options.map((option) => (
+                          <SelectItem 
+                            key={option.value} 
+                            value={option.value}
+                            className="pl-8"
+                          >
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </div>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
 
-              {(searchTerm ||
-                selectedLocation ||
-                selectedEducation ||
-                selectedSkill) && (
+              {(searchTerm || selectedFilter) && (
                 <div className="flex justify-center">
                   <Button
                     variant="outline"
