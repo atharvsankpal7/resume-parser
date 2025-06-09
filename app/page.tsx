@@ -15,6 +15,8 @@ import {
   Code,
   ChevronDown,
   ChevronRight,
+  Briefcase,
+  Award,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -28,12 +30,16 @@ import {
 } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { exportToExcel, prepareResumeDataForExcel } from "@/lib/excel";
@@ -96,17 +102,12 @@ const useResumeStore = create<ResumeStore>((set) => ({
   setResumeData: (resumes) => set({ resumeData: resumes }),
 }));
 
-interface FilterOption {
-  value: string;
-  label: string;
-  group: string;
-}
-
 export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedFilter, setSelectedFilter] = useState<string>("");
+  const [filterLabel, setFilterLabel] = useState<string>("Filter by...");
   const { toast } = useToast();
   
   // Zustand store hooks
@@ -123,56 +124,38 @@ export default function Home() {
   const locations = useMemo(() => {
     return Array.from(
       new Set(resumeData.map((r) => r.personalInfo?.location).filter(Boolean))
-    );
+    ).sort();
   }, [resumeData]);
 
   const educationLevels = useMemo(() => {
     return Array.from(
       new Set(resumeData.flatMap((r) => r.education?.map((e) => e.degree) || []).filter(Boolean))
-    );
+    ).sort();
   }, [resumeData]);
 
   const skills = useMemo(() => {
     return Array.from(
       new Set(resumeData.flatMap((r: { skills: any; }) => r.skills || []).filter(Boolean))
-    );
+    ).sort();
   }, [resumeData]);
 
-  // Create hierarchical filter options
-  const filterOptions = useMemo<FilterOption[]>(() => {
-    const options: FilterOption[] = [];
-    
-    // Location options
-    locations.forEach(location => {
-      options.push({
-        value: `location_${location}`,
-        label: location,
-        group: "Location"
-      });
-    });
-    
-    // Education options
-    educationLevels.forEach(education => {
-      options.push({
-        value: `education_${education}`,
-        label: education,
-        group: "Education"
-      });
-    });
-    
-    // Skills options
-    skills.forEach(skill => {
-      options.push({
-        value: `skill_${skill}`,
-        label: skill,
-        group: "Skills"
-      });
-    });
-    
-    // Other options could be added here
-    
-    return options;
-  }, [locations, educationLevels, skills]);
+  const jobTitles = useMemo(() => {
+    return Array.from(
+      new Set(resumeData.flatMap((r) => r.experience?.map((e) => e.title) || []).filter(Boolean))
+    ).sort();
+  }, [resumeData]);
+
+  const companies = useMemo(() => {
+    return Array.from(
+      new Set(resumeData.flatMap((r) => r.experience?.map((e) => e.company) || []).filter(Boolean))
+    ).sort();
+  }, [resumeData]);
+
+  const certifications = useMemo(() => {
+    return Array.from(
+      new Set(resumeData.flatMap((r) => r.certifications || []).filter(Boolean))
+    ).sort();
+  }, [resumeData]);
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files) {
@@ -319,6 +302,12 @@ export default function Home() {
   const clearFilters = () => {
     setSearchTerm("");
     setSelectedFilter("");
+    setFilterLabel("Filter by...");
+  };
+
+  const handleFilterSelect = (filterValue: string, label: string) => {
+    setSelectedFilter(filterValue);
+    setFilterLabel(label);
   };
 
   // Fixed filteredResumes with useMemo instead of useCallback
@@ -353,6 +342,15 @@ export default function Home() {
             break;
           case 'skill':
             matchesFilter = (resume.skills || []).includes(filterValue);
+            break;
+          case 'jobtitle':
+            matchesFilter = (resume.experience || []).some(exp => exp.title === filterValue);
+            break;
+          case 'company':
+            matchesFilter = (resume.experience || []).some(exp => exp.company === filterValue);
+            break;
+          case 'certification':
+            matchesFilter = (resume.certifications || []).includes(filterValue);
             break;
           default:
             matchesFilter = true;
@@ -393,20 +391,6 @@ export default function Home() {
       });
     }
   };
-
-  // Group options by category for the dropdown
-  const groupedOptions = useMemo(() => {
-    const groups: Record<string, FilterOption[]> = {};
-    
-    filterOptions.forEach(option => {
-      if (!groups[option.group]) {
-        groups[option.group] = [];
-      }
-      groups[option.group].push(option);
-    });
-    
-    return groups;
-  }, [filterOptions]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
@@ -559,36 +543,146 @@ export default function Home() {
                   />
                 </div>
 
-                <Select
-                  value={selectedFilter}
-                  onValueChange={setSelectedFilter}
-                >
-                  <SelectTrigger className="border-slate-300 focus:border-blue-500 focus:ring-blue-500">
-                    <Filter className="w-4 h-4 mr-2 text-slate-400" />
-                    <SelectValue placeholder="Filter by..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Filters</SelectItem>
-                    
-                    {Object.entries(groupedOptions).map(([group, options]) => (
-                      <div key={group}>
-                        <div className="px-2 py-1.5 text-sm font-medium text-slate-500 flex items-center">
-                          <ChevronRight className="w-4 h-4 mr-1" />
-                          {group}
-                        </div>
-                        {options.map((option) => (
-                          <SelectItem 
-                            key={option.value} 
-                            value={option.value}
-                            className="pl-8"
-                          >
-                            {option.label}
-                          </SelectItem>
-                        ))}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button 
+                      variant="outline" 
+                      className="justify-between border-slate-300 focus:border-blue-500 focus:ring-blue-500"
+                    >
+                      <div className="flex items-center">
+                        <Filter className="w-4 h-4 mr-2 text-slate-400" />
+                        {filterLabel}
                       </div>
-                    ))}
-                  </SelectContent>
-                </Select>
+                      <ChevronDown className="w-4 h-4 ml-2 text-slate-400" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent className="w-56" align="end">
+                    <DropdownMenuItem onClick={() => handleFilterSelect("", "Filter by...")}>
+                      <span>All Filters</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    
+                    {/* Location Submenu */}
+                    {locations.length > 0 && (
+                      <DropdownMenuSub>
+                        <DropdownMenuSubTrigger>
+                          <MapPin className="w-4 h-4 mr-2" />
+                          <span>Location</span>
+                        </DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent>
+                          {locations.map((location) => (
+                            <DropdownMenuItem 
+                              key={location} 
+                              onClick={() => handleFilterSelect(`location_${location}`, `Location: ${location}`)}
+                            >
+                              {location}
+                            </DropdownMenuItem>
+                          ))}
+                        </DropdownMenuSubContent>
+                      </DropdownMenuSub>
+                    )}
+
+                    {/* Education Submenu */}
+                    {educationLevels.length > 0 && (
+                      <DropdownMenuSub>
+                        <DropdownMenuSubTrigger>
+                          <GraduationCap className="w-4 h-4 mr-2" />
+                          <span>Education</span>
+                        </DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent>
+                          {educationLevels.map((education) => (
+                            <DropdownMenuItem 
+                              key={education} 
+                              onClick={() => handleFilterSelect(`education_${education}`, `Education: ${education}`)}
+                            >
+                              {education}
+                            </DropdownMenuItem>
+                          ))}
+                        </DropdownMenuSubContent>
+                      </DropdownMenuSub>
+                    )}
+
+                    {/* Skills Submenu */}
+                    {skills.length > 0 && (
+                      <DropdownMenuSub>
+                        <DropdownMenuSubTrigger>
+                          <Code className="w-4 h-4 mr-2" />
+                          <span>Skills</span>
+                        </DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent className="max-h-64 overflow-y-auto">
+                          {skills.map((skill) => (
+                            <DropdownMenuItem 
+                              key={skill} 
+                              onClick={() => handleFilterSelect(`skill_${skill}`, `Skill: ${skill}`)}
+                            >
+                              {skill}
+                            </DropdownMenuItem>
+                          ))}
+                        </DropdownMenuSubContent>
+                      </DropdownMenuSub>
+                    )}
+
+                    {/* Experience Submenu */}
+                    {jobTitles.length > 0 && (
+                      <DropdownMenuSub>
+                        <DropdownMenuSubTrigger>
+                          <Briefcase className="w-4 h-4 mr-2" />
+                          <span>Job Title</span>
+                        </DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent className="max-h-64 overflow-y-auto">
+                          {jobTitles.map((title) => (
+                            <DropdownMenuItem 
+                              key={title} 
+                              onClick={() => handleFilterSelect(`jobtitle_${title}`, `Job Title: ${title}`)}
+                            >
+                              {title}
+                            </DropdownMenuItem>
+                          ))}
+                        </DropdownMenuSubContent>
+                      </DropdownMenuSub>
+                    )}
+
+                    {/* Company Submenu */}
+                    {companies.length > 0 && (
+                      <DropdownMenuSub>
+                        <DropdownMenuSubTrigger>
+                          <Briefcase className="w-4 h-4 mr-2" />
+                          <span>Company</span>
+                        </DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent className="max-h-64 overflow-y-auto">
+                          {companies.map((company) => (
+                            <DropdownMenuItem 
+                              key={company} 
+                              onClick={() => handleFilterSelect(`company_${company}`, `Company: ${company}`)}
+                            >
+                              {company}
+                            </DropdownMenuItem>
+                          ))}
+                        </DropdownMenuSubContent>
+                      </DropdownMenuSub>
+                    )}
+
+                    {/* Certifications Submenu */}
+                    {certifications.length > 0 && (
+                      <DropdownMenuSub>
+                        <DropdownMenuSubTrigger>
+                          <Award className="w-4 h-4 mr-2" />
+                          <span>Certifications</span>
+                        </DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent className="max-h-64 overflow-y-auto">
+                          {certifications.map((cert) => (
+                            <DropdownMenuItem 
+                              key={cert} 
+                              onClick={() => handleFilterSelect(`certification_${cert}`, `Certification: ${cert}`)}
+                            >
+                              {cert}
+                            </DropdownMenuItem>
+                          ))}
+                        </DropdownMenuSubContent>
+                      </DropdownMenuSub>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
 
               {(searchTerm || selectedFilter) && (
